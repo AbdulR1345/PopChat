@@ -103,7 +103,7 @@ function SocketProvider({ children }) {
     }
   }, [dispatch, userId])
 
-  return <SocketContext.Provider value={connection?.userId === userId ? connection.socket : null}>{children}</SocketContext.Provider>
+  return <SocketContext.Provider value={userId && connection?.userId === userId ? connection.socket : null}>{children}</SocketContext.Provider>
 }
 
 export default SocketProvider
