@@ -1,23 +1,32 @@
 import axios from "axios"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { serverUrl } from "../main"
 import { useDispatch, useSelector } from "react-redux"
-import { setUserData } from "../redux/userSlice"
+import { setCurrentUser } from "../redux/userSlice"
+import { reportApiError } from "../utils/reportApiError"
 
-const getCurrentUser=()=>{
-    let dispatch=useDispatch()
-    let {userData}=useSelector(state=>state.user)
+const useGetCurrentUser=()=>{
+    const dispatch=useDispatch()
+    const authVersion=useSelector(state=>state.user.authVersion)
+    const initialAuthVersion=useRef(authVersion).current
     useEffect(()=>{
+        const controller=new AbortController()
         const fetchUser=async ()=>{
             try {
-                let result=await axios.get(`${serverUrl}/api/user/current`,{withCredentials:true})
-                dispatch(setUserData(result.data))
+                const result=await axios.get(`${serverUrl}/api/user/current`,{
+                    withCredentials:true,
+                    signal:controller.signal
+                })
+                if(!controller.signal.aborted){
+                    dispatch(setCurrentUser({userData:result.data,authVersion:initialAuthVersion}))
+                }
             } catch (error) {
-                console.log(error)
+                if(!axios.isCancel(error)) reportApiError(error)
             }
         }
         fetchUser()
-    },[])
+        return ()=>controller.abort()
+    },[dispatch,initialAuthVersion])
 }
 
-export default getCurrentUser
+export default useGetCurrentUser

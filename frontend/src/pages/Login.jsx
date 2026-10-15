@@ -1,60 +1,47 @@
+import { useState } from 'react'
+import { useDispatch } from 'react-redux'
+import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { FiEye, FiEyeOff, FiLock, FiMail, FiMessageCircle } from 'react-icons/fi'
 import { serverUrl } from '../main'
-import { useDispatch, useSelector } from 'react-redux'
 import { setSelectedUser, setUserData } from '../redux/userSlice'
 
 function Login() {
-    let navigate=useNavigate()
-    let [show,setShow]=useState(false)
-    let [email,setEmail]=useState("")
-    let [password,setPassword]=useState("")
-    let [loading,setLoading]=useState(false)
-    let [err,setErr]=useState("")
-    let dispatch=useDispatch()
-    
-        const handleLogin=async (e)=>{
-            e.preventDefault()
-            setLoading(true)
-            try {
-                let result =await axios.post(`${serverUrl}/api/auth/login`,{
-    email,password
-                },{withCredentials:true})
-               dispatch(setUserData(result.data))
-               dispatch(setSelectedUser(null))
-               navigate("/")
-                setEmail("")
-                setPassword("")
-                setLoading(false)
-                setErr("")
-            } catch (error) {
-                console.log(error)
-                setLoading(false)
-                setErr(error.response.data.message)
-            }
-        }
-    
-  return (
-    <div className='w-full h-[100vh] bg-slate-200 flex items-center justify-center'>
-     <div className='w-full max-w-[500px] h-[600px] bg-white rounded-lg shadow-gray-400 shadow-lg flex flex-col gap-[30px]'>
-        <div className='w-full h-[200px] bg-[#20c7ff] rounded-b-[30%] shadow-gray-400 shadow-lg flex items-center justify-center'>
-           <h1 className='text-gray-600 font-bold text-[30px]'>Login to <span  className='text-white'>chatly</span></h1>
-        </div>
-        <form className='w-full flex flex-col gap-[20px] items-center' onSubmit={handleLogin}>
-        <input type="email" placeholder='email' className='w-[90%] h-[50px] outline-none border-2 border-[#20c7ff] px-[20px] py-[10px] bg-[white] rounded-lg shadow-gray-200 shadow-lg text-gray-700 text-[19px]' onChange={(e)=>setEmail(e.target.value)} value={email}/>
-        <div className='w-[90%] h-[50px] border-2 border-[#20c7ff] overflow-hidden rounded-lg shadow-gray-200 shadow-lg relative'>
-        <input type={`${show?"text":"password"}`} placeholder='password' className='w-full h-full outline-none  px-[20px] py-[10px] bg-[white]  text-gray-700 text-[19px]' onChange={(e)=>setPassword(e.target.value)} value={password}/>
-        <span className='absolute top-[10px] right-[20px] text-[19px] text-[#20c7ff] font-semibold cursor-pointer' onClick={()=>setShow(prev=>!prev)}>{`${show?"hidden":"show"}`}</span>
-        </div>
-{err && <p className='text-red-500'>{"*" + err}</p>}
-        <button className='px-[20px] py-[10px] bg-[#20c7ff] rounded-2xl shadow-gray-400 shadow-lg text-[20px] w-[200px] mt-[20px] font-semibold hover:shadow-inner' disabled={loading}>{loading?"Loading...":"Login"}</button>
-        <p className='cursor-pointer' onClick={()=>navigate("/signup")}>Want to create a new account ? <span className='text-[#20c7ff] text-[bold]' >sign up</span></p>
-     </form>
-     </div>
-     
-    </div>
-  )
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const [showPassword, setShowPassword] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleLogin = async event => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const result = await axios.post(`${serverUrl}/api/auth/login`, { email, password }, { withCredentials: true })
+      dispatch(setUserData(result.data))
+      dispatch(setSelectedUser(null))
+      navigate('/')
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || 'Unable to sign in. Please try again.')
+    } finally { setLoading(false) }
+  }
+
+  return <main className="auth-stage"><div className="auth-card">
+    <div className="auth-mark"><FiMessageCircle /></div>
+    <span className="eyebrow">WELCOME BACK</span>
+    <h1>Sign in to PopChat</h1>
+    <p>Pick up the conversation right where you left off.</p>
+    <form className="auth-form" onSubmit={handleLogin}>
+      <label className="form-field"><span>Email address</span><span className="input-wrap"><FiMail /><input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" required /></span></label>
+      <label className="form-field"><span>Password</span><span className="input-wrap"><FiLock /><input type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" required /><button className="password-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(show => !show)}>{showPassword ? <FiEyeOff /> : <FiEye />}</button></span></label>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <button className="primary-button" type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
+    </form>
+    <p className="auth-switch">New to PopChat? <Link to="/signup">Create an account</Link></p>
+  </div></main>
 }
 
 export default Login

@@ -1,9 +1,17 @@
 import genToken from "../config/token.js"
 import User from "../models/user.model.js"
 import bcrypt from "bcryptjs"
+import publicUser from "../utils/publicUser.js"
+import { disconnectSocketsForToken } from "../socket/socket.js"
+import { cookieOptions, clearCookieOptions } from "../config/cookie.js"
 export const signUp=async (req,res)=>{
    try {
-    const {userName,email,password}=req.body
+    const {userName,email,password}=req.body ?? {}
+    if (typeof userName !== "string" || !userName.trim() ||
+        typeof email !== "string" || !email.trim() ||
+        typeof password !== "string") {
+        return res.status(400).json({message:"invalid signup details"})
+    }
     const checkUserByUserName=await User.findOne({userName})
     if(checkUserByUserName){
         return res.status(400).json({message:"userName already exist"})
@@ -24,24 +32,22 @@ const user=await User.create({
 
 const token=await genToken(user._id)
 
-res.cookie("token",token,{
-    httpOnly:true,
-    maxAge:7*24*60*60*1000,
-    sameSite:"Strict",
-    secure:false
-   })
+res.cookie("token",token,cookieOptions())
 
-   return res.status(201).json(user)
+   return res.status(201).json(publicUser(user))
 
 
    } catch (error) {
-    return res.status(500).json({message:`signup error ${error}`})
+    return res.status(500).json({message:"signup error"})
    } 
 }
 export const login=async (req,res)=>{
     try {
-     const {email,password}=req.body
-     const user=await User.findOne({email})
+     const {email,password}=req.body ?? {}
+     if (typeof email !== "string" || typeof password !== "string") {
+         return res.status(400).json({message:"invalid login details"})
+     }
+     const user=await User.findOne({email}).select("+password")
      if(!user){
          return res.status(400).json({message:"user does not exist"})
      }
@@ -53,26 +59,22 @@ export const login=async (req,res)=>{
  
  const token=await genToken(user._id)
  
- res.cookie("token",token,{
-     httpOnly:true,
-     maxAge:7*24*60*60*1000,
-     sameSite:"Strict",
-     secure:false
-    })
+ res.cookie("token",token,cookieOptions())
  
-    return res.status(200).json(user)
+    return res.status(200).json(publicUser(user))
  
  
     } catch (error) {
-     return res.status(500).json({message:`login error ${error}`})
+     return res.status(500).json({message:"login error"})
     } 
  }
 
  export const logOut=async (req,res)=>{
     try {
-        res.clearCookie("token")
+        disconnectSocketsForToken(req.cookies?.token)
+        res.clearCookie("token",clearCookieOptions())
         return res.status(200).json({message:"log out successfully"})
     } catch (error) {
-        return res.status(500).json({message:`logout error ${error}`})
+        return res.status(500).json({message:"logout error"})
     }
  }

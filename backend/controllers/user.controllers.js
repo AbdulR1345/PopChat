@@ -1,25 +1,26 @@
 import uploadOnCloudinary from "../config/cloudinary.js"
 import User from "../models/user.model.js"
+import publicUser from "../utils/publicUser.js"
 
 export const getCurrentUser=async (req,res)=>{
 try {
-    let user=await User.findById(req.userId).select("-password")
+    let user=await User.findById(req.userId)
     if(!user){
         return res.status(400).json({message:"user not found"})
     }
 
-    return res.status(200).json(user)
+    return res.status(200).json(publicUser(user))
 } catch (error) {
-    return res.status(500).json({message:`current user error ${error}`})
+    return res.status(500).json({message:"current user error"})
 }
 }
 
 export const editProfile=async (req,res)=>{
     try {
-        let {name}=req.body
+        let {name}=req.body ?? {}
         let image;
         if(req.file){
-            image=await uploadOnCloudinary(req.file.path)
+            image=await uploadOnCloudinary(req.file.buffer)
         }
         let user=await User.findByIdAndUpdate(req.userId,{
            name,
@@ -30,9 +31,9 @@ export const editProfile=async (req,res)=>{
             return res.status(400).json({message:"user not found"})
         }
 
-        return res.status(200).json(user)
+        return res.status(200).json(publicUser(user))
     } catch (error) {
-        return res.status(500).json({message:`profile error ${error}`})
+        return res.status(500).json({message:"profile error"})
     }
 }
 
@@ -40,10 +41,10 @@ export const getOtherUsers=async (req,res)=>{
     try {
         let users=await User.find({
             _id:{$ne:req.userId}
-        }).select("-password")
-        return res.status(200).json(users)
+        })
+        return res.status(200).json(users.map(publicUser))
     } catch (error) {
-        return res.status(500).json({message:`get other users error ${error}`})
+        return res.status(500).json({message:"get other users error"})
     }
 }
 
@@ -59,8 +60,8 @@ export const search =async (req,res)=>{
                 {userName:{$regex:query,$options:"i"}},
             ]
         })
-        return res.status(200).json(users)
+        return res.status(200).json(users.map(publicUser))
     } catch (error) {
-        return res.status(500).json({message:`search users error ${error}`})
+        return res.status(500).json({message:"search users error"})
     }
 }
