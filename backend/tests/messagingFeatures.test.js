@@ -22,6 +22,7 @@ const originals = {
   create: Message.create,
   find: Message.find,
   findOne: Message.findOne,
+  findOneAndUpdate: Message.findOneAndUpdate,
   updateMany: Message.updateMany,
   aggregate: Message.aggregate,
   conversationFind: Conversation.findOne,
@@ -38,16 +39,19 @@ const cookieFor = userId => `token=${jwt.sign({ userId }, process.env.JWT_SECRET
 const keyFor = people => [...people].map(String).sort().join(':')
 const matches = (item, filter) => Object.entries(filter).every(([field, expected]) => {
   if (field === '$or') return expected.some(branch => matches(item, branch))
+  if (field === '$and') return expected.every(branch => matches(item, branch))
   const actual = item[field]
-  if (expected && typeof expected === 'object' && '$in' in expected) {
-    return expected.$in.map(String).includes(String(actual))
+  if (expected && typeof expected === 'object' && !(expected instanceof Date)) {
+    if ('$in' in expected) return expected.$in.some(value => value == null ? actual == null : String(value) === String(actual))
+    if ('$gt' in expected) return actual > expected.$gt
+    if ('$lt' in expected) return actual < expected.$lt
   }
   if (expected === null) return actual == null
   return String(actual) === String(expected)
 })
 const copy = item => ({ ...item })
 const nextMessage = fields => {
-  const item = { _id: String(nextId++).padStart(24, '0'), createdAt: new Date(Date.now() + nextId), ...fields }
+  const item = { _id: String(nextId++).padStart(24, '0'), createdAt: new Date(Date.now() + nextId), __v: 0, image: '', reactions: [], ...fields }
   documents.push(item)
   return item
 }
@@ -93,7 +97,17 @@ before(async () => {
   process.env.JWT_SECRET = 'messaging-features-test-secret'
   User.exists = async ({ _id }) => users.has(String(_id)) ? { _id } : null
   Message.create = async fields => nextMessage(fields)
-  Message.findOne = async filter => documents.find(item => matches(item, filter)) ?? null
+  Message.findOne = async filter => {
+    const item = documents.find(row => matches(row, filter))
+    return item ? copy(item) : null
+  }
+  Message.findOneAndUpdate = async (filter, update) => {
+    const item = documents.find(row => matches(row, filter))
+    if (!item) return null
+    Object.assign(item, update.$set ?? {})
+    for (const [field, amount] of Object.entries(update.$inc ?? {})) item[field] = (item[field] ?? 0) + amount
+    return copy(item)
+  }
   Message.find = filter => {
     let rows = documents.filter(item => matches(item, filter))
     return {
@@ -122,7 +136,9 @@ before(async () => {
     for (const item of [...documents].filter(doc => doc.sender === current || doc.receiver === current)
       .sort((a, b) => b.createdAt - a.createdAt)) {
       const other = item.sender === current ? item.receiver : item.sender
-      if (!grouped.has(other)) grouped.set(other, { userId: other, lastMessage: copy(item), unreadCount: 0 })
+      if (!grouped.has(other)) grouped.set(other, { userId: other, lastMessage: {
+        ...copy(item), message: item.deletedAt ? '' : item.message, image: item.deletedAt ? '' : item.image,
+      }, unreadCount: 0 })
       if (item.receiver === current && item.receiptVersion === 1 && !item.readAt) {
         grouped.get(other).unreadCount++
       }
@@ -146,6 +162,7 @@ after(async () => {
   Message.create = originals.create
   Message.find = originals.find
   Message.findOne = originals.findOne
+  Message.findOneAndUpdate = originals.findOneAndUpdate
   Message.updateMany = originals.updateMany
   Message.aggregate = originals.aggregate
   Conversation.findOne = originals.conversationFind
@@ -335,4 +352,159 @@ test('typing uses authenticated identity and clears after every tab stops, timeo
   await disconnectStopped
   observer.disconnect()
   second.disconnect()
+})
+
+const mutate = (userId, method, path, body) => fetch(`${baseUrl}/api/message${path}`, {
+  method,
+  headers: { Cookie: cookieFor(userId), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+})
+
+test('replies validate their target and return bounded, redacted previews', async () => {
+  documents.length = 0
+  conversations.clear()
+  const original = nextMessage({ sender: bob, receiver: alice, message: 'private original' })
+  const image = nextMessage({ sender: bob, receiver: alice, image: 'https://example.test/reply.png' })
+  const elsewhere = nextMessage({ sender: charlie, receiver: alice, message: 'elsewhere' })
+  assert.equal((await postMessage(alice, bob, { message: 'reply', replyTo: 'bad' })).status, 400)
+  assert.equal((await postMessage(alice, bob, { message: 'reply', replyTo: elsewhere._id })).status, 400)
+  assert.equal((await postMessage(alice, bob, { message: 'reply', replyTo: 'f'.repeat(24) })).status, 400)
+  const aliceTab = clientFor(alice)
+  const bobTab = clientFor(bob)
+  await Promise.all([connect(aliceTab), connect(bobTab)])
+  const outgoing = nextEvent(aliceTab, 'messageCreated', value => value.replyTo === image._id)
+  const incoming = nextEvent(bobTab, 'newMessage', value => value.replyTo === image._id)
+  const sent = await postMessage(alice, bob, { message: 'reply', replyTo: image._id })
+  assert.equal(sent.status, 201)
+  assert.equal((await sent.json()).replyPreview.text, 'Photo')
+  assert.equal((await outgoing).replyPreview.text, 'Photo')
+  assert.equal((await incoming).replyPreview.text, 'Photo')
+  const deleted = await mutate(bob, 'DELETE', `/${original._id}`)
+  assert.equal(deleted.status, 200)
+  const toDeleted = await postMessage(alice, bob, { message: 'still here', replyTo: original._id })
+  assert.equal(toDeleted.status, 201)
+  assert.equal((await toDeleted.json()).replyPreview.text, 'This message was deleted')
+  const history = await mutate(alice, 'GET', `/get/${bob}`).then(result => result.json())
+  assert.equal(history.find(item => item._id === original._id).message, '')
+  assert.equal(history.find(item => item.replyTo === original._id).replyPreview.text, 'This message was deleted')
+  assert.ok(!JSON.stringify(history).includes('private original'))
+  aliceTab.disconnect(); bobTab.disconnect()
+})
+
+test('reactions are authorized, idempotent, atomic, and reach both users tabs', async () => {
+  documents.length = 0
+  const item = nextMessage({ sender: alice, receiver: bob, message: 'react' })
+  const sender = clientFor(alice)
+  const firstTab = clientFor(bob)
+  const secondTab = clientFor(bob)
+  await Promise.all([connect(sender), connect(firstTab), connect(secondTab)])
+  const updates = [sender, firstTab, secondTab].map(client => nextEvent(client, 'messageUpdated', value => value._id === item._id && value.reactions?.length === 1))
+  assert.equal((await mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: '👍' })).status, 200)
+  await Promise.all(updates)
+  assert.equal((await mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: '👍' })).status, 200)
+  assert.equal(documents[0].__v, 1)
+  assert.equal((await mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: 'invalid' })).status, 400)
+  assert.equal((await mutate(charlie, 'PUT', `/${item._id}/reaction`, { emoji: '😂' })).status, 404)
+  await Promise.all([
+    mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: '❤️' }),
+    mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: '🔥' }),
+    mutate(alice, 'PUT', `/${item._id}/reaction`, { emoji: '😂' }),
+  ])
+  assert.equal(documents[0].reactions.filter(reaction => reaction.user === bob).length, 1)
+  assert.equal(documents[0].reactions.filter(reaction => reaction.user === alice).length, 1)
+  assert.equal((await mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: null })).status, 200)
+  assert.equal(documents[0].reactions.some(reaction => reaction.user === bob), false)
+  sender.disconnect(); firstTab.disconnect(); secondTab.disconnect()
+})
+
+test('edits preserve identity and receipts, reject stale text edits, and ignore reaction-only revisions', async () => {
+  documents.length = 0
+  const item = nextMessage({ sender: alice, receiver: bob, message: 'first', receiptVersion: 1, readAt: new Date() })
+  const image = nextMessage({ sender: alice, receiver: bob, message: 'caption', image: 'https://example.test/image.png' })
+  const senderTab = clientFor(alice)
+  const receiverTab = clientFor(bob)
+  await Promise.all([connect(senderTab), connect(receiverTab)])
+  assert.equal((await mutate(bob, 'PATCH', `/${item._id}`, { message: 'other', expectedEditedAt: null })).status, 403)
+  assert.equal((await mutate(alice, 'PATCH', `/${item._id}`, { message: ' ', expectedEditedAt: null })).status, 400)
+  assert.equal((await mutate(alice, 'PATCH', `/${image._id}`, { message: 'other', expectedEditedAt: null })).status, 400)
+  await mutate(bob, 'PUT', `/${item._id}/reaction`, { emoji: '👍' })
+  const edits = [senderTab, receiverTab].map(client => nextEvent(client, 'messageUpdated', value => value._id === item._id && value.message === 'second'))
+  const first = await mutate(alice, 'PATCH', `/${item._id}`, { message: 'second', expectedEditedAt: null })
+  assert.equal(first.status, 200)
+  await Promise.all(edits)
+  const changed = await first.json()
+  assert.equal(changed._id, item._id)
+  assert.ok(changed.readAt)
+  assert.ok(changed.editedAt)
+  assert.equal((await mutate(alice, 'PATCH', `/${item._id}`, { message: 'stale', expectedEditedAt: null })).status, 409)
+  const results = await Promise.all([
+    mutate(alice, 'PATCH', `/${item._id}`, { message: 'third', expectedEditedAt: changed.editedAt }),
+    mutate(alice, 'PATCH', `/${item._id}`, { message: 'fourth', expectedEditedAt: changed.editedAt }),
+  ])
+  assert.deepEqual(results.map(result => result.status).sort(), [200, 409])
+  assert.equal(documents[0].createdAt, item.createdAt)
+  senderTab.disconnect(); receiverTab.disconnect()
+})
+
+test('deletion is idempotent and removes content from history, inbox, replies, sockets, and media', async () => {
+  documents.length = 0
+  const original = nextMessage({ sender: alice, receiver: bob, message: 'secret caption', image: 'https://example.test/private.png', receiptVersion: 1 })
+  const reply = nextMessage({ sender: bob, receiver: alice, message: 'reply', replyTo: original._id })
+  const observer = clientFor(bob)
+  await connect(observer)
+  assert.equal((await mutate(bob, 'DELETE', `/${original._id}`)).status, 403)
+  const update = nextEvent(observer, 'messageUpdated', value => value._id === original._id)
+  const first = await mutate(alice, 'DELETE', `/${original._id}`)
+  assert.equal(first.status, 200)
+  const event = await update
+  assert.equal(event.message, '')
+  assert.equal(event.image, '')
+  assert.ok(event.deletedAt)
+  assert.equal((await mutate(alice, 'DELETE', `/${original._id}`)).status, 200)
+  assert.equal(documents[0].__v, 1)
+  assert.equal((await mutate(alice, 'PATCH', `/${original._id}`, { message: 'revive', expectedEditedAt: null })).status, 409)
+  assert.equal((await mutate(bob, 'PUT', `/${original._id}/reaction`, { emoji: '👍' })).status, 409)
+  const history = await mutate(bob, 'GET', `/get/${alice}`).then(result => result.json())
+  assert.equal(history.find(item => item._id === original._id).image, '')
+  assert.equal(history.find(item => item._id === reply._id).replyPreview.text, 'This message was deleted')
+  const media = await mutate(bob, 'GET', `/media/${alice}`).then(result => result.json())
+  assert.deepEqual(media.items, [])
+  const latest = nextMessage({ sender: alice, receiver: bob, message: 'last secret' })
+  await mutate(alice, 'DELETE', `/${latest._id}`)
+  const inbox = await mutate(bob, 'GET', '/inbox').then(result => result.json())
+  assert.equal(inbox.find(entry => entry.userId === alice).lastMessage.message, '')
+  observer.disconnect()
+  const reconnected = clientFor(bob)
+  const pending = nextEvent(reconnected, 'pendingMessages')
+  await connect(reconnected)
+  const replay = await pending
+  assert.equal(replay.find(item => item._id === original._id).image, '')
+  assert.ok(!JSON.stringify(replay).includes('secret caption'))
+  reconnected.disconnect()
+})
+
+test('media uses the partial-index predicate in both directions and paginates without other users', async () => {
+  documents.length = 0
+  const base = new Date('2026-01-01T00:00:00Z').getTime()
+  for (let index = 0; index < 5; index++) nextMessage({
+    sender: index % 2 ? bob : alice, receiver: index % 2 ? alice : bob,
+    image: `https://example.test/${index}.png`, createdAt: new Date(base + index * 1000),
+  })
+  nextMessage({ sender: charlie, receiver: alice, image: 'https://example.test/other.png', createdAt: new Date(base + 8000) })
+  nextMessage({ sender: alice, receiver: bob, image: 'https://example.test/deleted.png', deletedAt: new Date(), createdAt: new Date(base + 9000) })
+  const indexes = Message.schema.indexes()
+  assert.ok(indexes.some(([keys, options]) => keys.sender === 1 && keys.receiver === 1 && keys.createdAt === -1 &&
+    keys._id === -1 && options.partialFilterExpression?.image?.$gt === ''))
+  const first = await mutate(alice, 'GET', `/media/${bob}?limit=2`).then(result => result.json())
+  assert.deepEqual(first.items.map(item => item.image), ['https://example.test/4.png', 'https://example.test/3.png'])
+  assert.ok(first.nextCursor)
+  const second = await mutate(alice, 'GET', `/media/${bob}?limit=2&cursor=${first.nextCursor}`).then(result => result.json())
+  assert.deepEqual(second.items.map(item => item.image), ['https://example.test/2.png', 'https://example.test/1.png'])
+  const third = await mutate(alice, 'GET', `/media/${bob}?limit=2&cursor=${second.nextCursor}`).then(result => result.json())
+  assert.deepEqual(third.items.map(item => item.image), ['https://example.test/0.png'])
+  assert.equal(third.nextCursor, null)
+  assert.equal((await mutate(alice, 'GET', `/media/${bob}?limit=51`)).status, 400)
+  assert.equal((await mutate(alice, 'GET', `/media/${bob}?cursor=bad`)).status, 400)
+  assert.equal((await mutate(alice, 'GET', '/media/not-an-id')).status, 400)
+  assert.deepEqual((await mutate(bob, 'GET', `/media/${charlie}`).then(result => result.json())).items, [])
 })

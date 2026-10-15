@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { messagePreview, sortContactsByActivity } from '../src/utils/conversations.js'
-import messageReducer, { appendMessage, loadMessages, updateMessageStatus } from '../src/redux/messageSlice.js'
-import userReducer, { clearTypingUsers, setInboxForSession, setLastSentMessage, setSelectedUser, setTypingUser, setUserData } from '../src/redux/userSlice.js'
+import messageReducer, { appendMessage, applyMessageUpdate, loadMessages, updateMessageStatus } from '../src/redux/messageSlice.js'
+import userReducer, { applyInboxMessageUpdate, clearTypingUsers, setInboxForSession, setLastSentMessage, setSelectedUser, setTypingUser, setUserData } from '../src/redux/userSlice.js'
 
 const me = { _id: 'me', userName: 'me' }
 const bob = { _id: 'bob', name: 'Bob' }
@@ -68,4 +68,52 @@ test('message insertion is idempotent and receipt states never regress after a s
   assert.equal(state.messages[0].readAt, '2026-01-01T10:02:00Z')
   state = messageReducer(state, setSelectedUser(charlie))
   assert.deepEqual(state.messages, [])
+})
+
+test('delete updates redact loaded messages and reply quotes even after stale history arrives', () => {
+  let state = messageReducer(undefined, { type: 'init' })
+  state = messageReducer(state, setUserData(me))
+  state = messageReducer(state, setSelectedUser(bob))
+  const original = { _id: 'm1', sender: 'me', receiver: 'bob', message: 'secret', image: 'private-url', revision: 0 }
+  const reply = { _id: 'm2', sender: 'bob', receiver: 'me', message: 'reply', replyTo: 'm1', replyPreview: { _id: 'm1', text: 'secret' } }
+  state = messageReducer(state, appendMessage({ conversationId: 'bob', message: original }))
+  state = messageReducer(state, appendMessage({ conversationId: 'bob', message: reply }))
+  const tombstone = { ...original, message: '', image: '', deletedAt: '2026-01-01T12:00:00Z', revision: 1 }
+  state = messageReducer(state, applyMessageUpdate({ conversationId: 'bob', message: tombstone }))
+  assert.equal(state.messages[0].message, '')
+  assert.equal(state.messages[1].replyPreview.text, 'This message was deleted')
+  state = messageReducer(state, loadMessages({ conversationId: 'bob', messages: [original, reply] }))
+  assert.equal(state.messages[0].image, '')
+  assert.equal(state.messages[1].replyPreview.text, 'This message was deleted')
+  state = messageReducer(state, applyMessageUpdate({ conversationId: 'bob', message: original }))
+  assert.equal(state.messages[0].message, '')
+  state = messageReducer(state, setSelectedUser(charlie))
+  assert.deepEqual(state.updates, {})
+})
+
+test('reaction and edit updates apply by revision while retaining receipts', () => {
+  let state = messageReducer(undefined, { type: 'init' })
+  state = messageReducer(state, setUserData(me))
+  state = messageReducer(state, setSelectedUser(bob))
+  const initial = { _id: 'm1', sender: 'me', receiver: 'bob', message: 'hello', revision: 0, readAt: 'read' }
+  state = messageReducer(state, appendMessage({ conversationId: 'bob', message: initial }))
+  state = messageReducer(state, applyMessageUpdate({ conversationId: 'bob', message: { ...initial, message: 'edited', editedAt: 'edited', revision: 2, readAt: null } }))
+  state = messageReducer(state, applyMessageUpdate({ conversationId: 'bob', message: { ...initial, reactions: [{ user: 'bob', emoji: '👍' }], revision: 1 } }))
+  assert.equal(state.messages[0].message, 'edited')
+  assert.equal(state.messages[0].readAt, 'read')
+  state = messageReducer(state, applyMessageUpdate({ conversationId: 'bob', message: { ...state.messages[0], reactions: [{ user: 'bob', emoji: '🔥' }], revision: 3 } }))
+  assert.equal(state.messages[0].reactions[0].emoji, '🔥')
+})
+
+test('stale inbox responses cannot restore a deleted preview', () => {
+  let state = userReducer(undefined, { type: 'init' })
+  state = userReducer(state, setUserData(me))
+  const old = { _id: 'm1', sender: 'me', receiver: 'bob', message: 'secret', createdAt: '2026-01-01T10:00:00Z', revision: 0 }
+  state = userReducer(state, setInboxForSession({ userId: 'me', authVersion: state.authVersion, inbox: [{ userId: 'bob', lastMessage: old, unreadCount: 0 }] }))
+  state = userReducer(state, applyInboxMessageUpdate({ ...old, message: '', deletedAt: '2026-01-01T11:00:00Z', revision: 1 }))
+  state = userReducer(state, setInboxForSession({ userId: 'me', authVersion: state.authVersion, inbox: [{ userId: 'bob', lastMessage: old, unreadCount: 0 }] }))
+  assert.equal(state.inbox[0].lastMessage.message, '')
+  assert.equal(state.inbox[0].lastMessage.deletedAt, '2026-01-01T11:00:00Z')
+  state = userReducer(state, setLastSentMessage(old))
+  assert.equal(state.inbox[0].lastMessage.message, '')
 })

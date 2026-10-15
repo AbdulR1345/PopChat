@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { io } from 'socket.io-client'
 import { serverUrl } from '../main'
-import { appendMessage, updateMessageStatus } from '../redux/messageSlice'
-import { clearTypingUsers, setLastSentMessage, setOnlineUsers, setTypingUser, setUserData } from '../redux/userSlice'
+import { appendMessage, applyMessageUpdate, updateMessageStatus } from '../redux/messageSlice'
+import { applyInboxMessageUpdate, clearTypingUsers, setLastSentMessage, setOnlineUsers, setTypingUser, setUserData } from '../redux/userSlice'
 import SocketContext from './SocketContext'
 
 function SocketProvider({ children }) {
@@ -52,6 +52,12 @@ function SocketProvider({ children }) {
       dispatch(setLastSentMessage(message))
     }
     const handleStatus = status => dispatch(updateMessageStatus(status))
+    const handleMessageUpdated = message => {
+      if (String(message.sender) !== userId && String(message.receiver) !== userId) return
+      const conversationId = String(message.sender) === userId ? String(message.receiver) : String(message.sender)
+      dispatch(applyMessageUpdate({ conversationId, message }))
+      dispatch(applyInboxMessageUpdate(message))
+    }
     const stopTyping = ({ userId: otherId }) => {
       window.clearTimeout(typingTimers.get(otherId))
       typingTimers.delete(otherId)
@@ -81,6 +87,7 @@ function SocketProvider({ children }) {
     socket.on('pendingMessages', handlePendingMessages)
     socket.on('messageCreated', handleMessageCreated)
     socket.on('messageStatus', handleStatus)
+    socket.on('messageUpdated', handleMessageUpdated)
     socket.on('typing:start', startTyping)
     socket.on('typing:stop', stopTyping)
     socket.on('disconnect', handleDisconnect)
@@ -92,6 +99,7 @@ function SocketProvider({ children }) {
       socket.off('pendingMessages', handlePendingMessages)
       socket.off('messageCreated', handleMessageCreated)
       socket.off('messageStatus', handleStatus)
+      socket.off('messageUpdated', handleMessageUpdated)
       socket.off('typing:start', startTyping)
       socket.off('typing:stop', stopTyping)
       socket.off('disconnect', handleDisconnect)

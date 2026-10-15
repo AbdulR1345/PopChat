@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken"
 import { Server } from "socket.io"
 import User from "../models/user.model.js"
 import Message from "../models/message.model.js"
+import { publicMessages } from "../utils/messageView.js"
 import { allowedOrigin } from "../config/origin.js"
 
 const app = express()
@@ -67,6 +68,12 @@ export const publishStatuses = messages => {
   }
 }
 
+export const publishMessageUpdated = message => {
+  for (const userId of new Set([String(message.sender), String(message.receiver)])) {
+    emitToUser(userId, "messageUpdated", message)
+  }
+}
+
 export const disconnectSocketsForToken = token => {
   if (typeof token !== "string") return
   for (const socketId of [...(tokenSocketMap.get(tokenDigest(token)) ?? [])]) {
@@ -82,7 +89,7 @@ const queuePendingMessages = async socket => {
   const unsent = messages.filter(message => !socket.data.pendingDeliveryIds.has(String(message._id)))
   if (!unsent.length) return
   for (const message of unsent) socket.data.pendingDeliveryIds.add(String(message._id))
-  socket.emit("pendingMessages", unsent)
+  socket.emit("pendingMessages", await publicMessages(unsent))
 }
 
 const stopTyping = (socket, recipient) => {

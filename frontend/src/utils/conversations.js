@@ -9,6 +9,7 @@ export const sortContactsByActivity = (contacts, inbox) => {
 
 export const messagePreview = message => {
   if (!message) return ''
+  if (message.deletedAt) return 'This message was deleted'
   return message.message?.trim() || (message.image ? 'Photo' : '')
 }
 

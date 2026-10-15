@@ -6,8 +6,10 @@ export const buildInboxPipeline = userId => {
     { $match: { $or: [{ sender: currentUser }, { receiver: currentUser }] } },
     { $sort: { createdAt: -1, _id: -1 } },
     { $project: {
-      sender: 1, receiver: 1, message: 1, image: 1, createdAt: 1,
-      deliveredAt: 1, readAt: 1, receiptVersion: 1,
+      sender: 1, receiver: 1, createdAt: 1, deletedAt: 1, editedAt: 1,
+      message: { $cond: [{ $ne: [{ $ifNull: ["$deletedAt", null] }, null] }, "", "$message"] },
+      image: { $cond: [{ $ne: [{ $ifNull: ["$deletedAt", null] }, null] }, "", "$image"] },
+      deliveredAt: 1, readAt: 1, receiptVersion: 1, __v: 1,
       otherUser: { $cond: [{ $eq: ["$sender", currentUser] }, "$receiver", "$sender"] },
       isUnread: { $and: [
         { $eq: ["$receiver", currentUser] },
@@ -20,6 +22,7 @@ export const buildInboxPipeline = userId => {
       lastMessage: { $first: {
         _id: "$_id", sender: "$sender", receiver: "$receiver",
         message: "$message", image: "$image", createdAt: "$createdAt",
+        deletedAt: "$deletedAt", editedAt: "$editedAt", revision: "$__v",
         deliveredAt: "$deliveredAt", readAt: "$readAt", receiptVersion: "$receiptVersion",
       } },
       unreadCount: { $sum: { $cond: ["$isUnread", 1, 0] } },

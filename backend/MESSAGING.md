@@ -26,3 +26,19 @@
 - `typing:start` / `typing:stop`: client supplies only a recipient ID. The server supplies the authenticated sender ID, combines multiple sender tabs, and clears stale typing after four seconds or disconnect.
 
 Read and delivery updates are idempotent. Inbox state is fetched again on connection; active message history is fetched again on reconnection. Socket events and old HTTP request bodies remain compatible with existing clients.
+
+## Phase 9 message changes
+
+All endpoints use the existing authenticated cookie and origin checks. Message IDs remain MongoDB `_id` values, and the existing send, history, inbox, receipt, and image-upload contracts remain valid. Responses add `reactions` (one `{ user, emoji }` entry per reacting user), `replyTo`, `replyPreview`, `editedAt`, `deletedAt`, and `revision`. Missing fields on historical messages are treated as empty or null. `revision` is the server-managed `__v` counter, incremented atomically by reaction, edit, and deletion updates; receipt changes do not affect it.
+
+- `PUT /api/message/:messageId/reaction` accepts `{ "emoji": "👍" }` or `{ "emoji": null }` to remove the caller's reaction. Supported values are 👍 ❤️ 😂 😮 😢 🔥. The authenticated caller must be a participant. A conditional revision update retries conflicting writes, so concurrent participants cannot overwrite each other's reactions.
+- `POST /api/message/send/:receiver` accepts optional `replyTo` in the existing form data or JSON body. The referenced message must belong to the same two-person conversation. A deleted original can be referenced, with a tombstone preview.
+- `PATCH /api/message/:messageId` accepts `{ "message": "new text", "expectedEditedAt": null }` for an unedited message, or the last `editedAt` ISO timestamp for a previously edited message. Only the sender may edit a text-only, live message. The server advances `editedAt` monotonically and conditionally updates on that value. A concurrent reaction therefore does not cause a text-edit conflict; a concurrent text edit returns `409`.
+- `DELETE /api/message/:messageId` deletes the sender's message for everyone. Repeating it returns the same tombstone. The document, `_id`, timestamps, reply references, and receipts remain. Text, image URL, and reactions are cleared. Cloudinary assets are not deleted.
+- `GET /api/message/media/:otherUserId?limit=24&cursor=...` returns `{ items, nextCursor }`. Limit is 1–50. Items contain `_id`, `image`, `sender`, and `createdAt`. The cursor encodes the last `(createdAt, _id)` pair. Both directional queries are scoped to the authenticated caller and exclude deleted messages.
+
+The new `messageUpdated` socket event sends the complete redacted message with its `revision` to every active tab of both participants after a reaction, edit, or deletion. Existing `messageCreated`, `newMessage`, and `pendingMessages` carry the additive reply metadata. Edits and deletions also trigger the existing `inboxUpdated` event. Clients apply only the newest revision, update loaded reply previews, and refetch history and inbox on reconnect.
+
+Reply previews are assembled from a bounded batch of references, without recursive population. Deleted originals produce `This message was deleted`; missing originals produce `Message unavailable`. The history, inbox, pending socket payloads, and media API redact tombstones. A recipient who previously viewed, saved, or copied content or a Cloudinary URL may still retain it.
+
+The media index is `{ sender: 1, receiver: 1, createdAt: -1, _id: -1 }` with partial filter `{ image: { $gt: "" } }`. Each directional media query has equality on the first two keys, the exact partial-filter predicate, and descending cursor order. It is additive; existing indexes are untouched. No historical-document backfill is needed.
