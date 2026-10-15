@@ -11,7 +11,7 @@ button,input{font:inherit}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed}
 a{color:inherit}
-button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid #ba82ff;outline-offset:3px}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #ba82ff;outline-offset:3px}
 ::selection{background:#8d39d9;color:#fff}
 
 .app-stage{min-height:100dvh;padding:38px;display:flex;justify-content:center;align-items:center;background:radial-gradient(ellipse 36% 38% at 49% 95%,rgba(137,25,229,.42),transparent 80%),radial-gradient(ellipse 34% 40% at 75% 18%,rgba(79,38,151,.27),transparent 80%),#101015}
@@ -179,6 +179,16 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid #ba82
 .profile-avatar button{position:absolute;right:-4px;bottom:0;display:grid;place-items:center;width:34px;height:34px;border:2px solid #282430;border-radius:50%;background:#9e28ed;color:#fff}
 .profile-avatar button svg{width:16px;height:16px}
 .profile-avatar input{display:none}
+.profile-card{max-height:calc(100dvh - 60px);overflow-y:auto;overflow-x:hidden}
+.profile-textarea,.profile-select{width:100%;min-width:0;padding:12px 13px;border:1px solid rgba(220,213,239,.15);border-radius:11px;background:#211f28;color:#fff;font:inherit;font-size:13px}
+.profile-textarea{resize:vertical;min-height:94px;line-height:1.5}
+.profile-select{min-height:48px}
+.field-count{float:right;color:#aaa4b5;font-size:11px;font-weight:400}
+.form-success{padding:10px 12px;border:1px solid rgba(67,217,139,.35);border-radius:9px;background:rgba(67,217,139,.1);color:#b6f4d2;font-size:12px}
+.availability-badge{display:inline-block;margin-top:10px;padding:5px 11px;border:1px solid rgba(196,142,243,.32);border-radius:100px;background:rgba(158,40,237,.13);color:#e4bbff;font-size:11px;font-weight:650}
+.contact-bio,.contact-bio-empty{margin:0;overflow-wrap:anywhere;color:#d9d2e1;font-size:12px;line-height:1.55}
+.contact-bio-empty{color:#9f97aa;font-style:italic}
+@media(max-width:700px){.profile-card{max-height:calc(100dvh - 34px)}}
 .readonly-wrap{opacity:.75}
 .profile-note{margin:0;text-align:center;color:#a29baa;font-size:11px}
 .back-link{display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;color:#b4a5c5;font-size:12px;padding:0}

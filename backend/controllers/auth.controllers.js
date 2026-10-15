@@ -1,7 +1,7 @@
 import genToken from "../config/token.js"
 import User from "../models/user.model.js"
 import bcrypt from "bcryptjs"
-import publicUser from "../utils/publicUser.js"
+import { ownUser } from "../utils/publicUser.js"
 import { disconnectSocketsForToken } from "../socket/socket.js"
 import { cookieOptions, clearCookieOptions } from "../config/cookie.js"
 export const signUp=async (req,res)=>{
@@ -34,7 +34,7 @@ const token=await genToken(user._id)
 
 res.cookie("token",token,cookieOptions())
 
-   return res.status(201).json(publicUser(user))
+   return res.status(201).json(ownUser(user))
 
 
    } catch (error) {
@@ -61,7 +61,7 @@ export const login=async (req,res)=>{
  
  res.cookie("token",token,cookieOptions())
  
-    return res.status(200).json(publicUser(user))
+    return res.status(200).json(ownUser(user))
  
  
     } catch (error) {

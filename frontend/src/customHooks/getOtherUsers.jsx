@@ -11,14 +11,17 @@ const useGetOtherUsers=()=>{
     const authVersion=useSelector(state=>state.user.authVersion)
     useEffect(()=>{
         if(!userId) return
-        const controller=new AbortController()
+        let controller
         const fetchUser=async ()=>{
+            controller?.abort()
+            controller=new AbortController()
+            const request=controller
             try {
                 const result=await axios.get(`${serverUrl}/api/user/others`,{
                     withCredentials:true,
-                    signal:controller.signal
+                    signal:request.signal
                 })
-                if(!controller.signal.aborted){
+                if(!request.signal.aborted){
                     dispatch(setOtherUsersForSession({userId,authVersion,users:result.data}))
                 }
             } catch (error) {
@@ -26,7 +29,9 @@ const useGetOtherUsers=()=>{
             }
         }
         fetchUser()
-        return ()=>controller.abort()
+        const refreshOnFocus=()=>{ if(document.visibilityState==='visible') void fetchUser() }
+        window.addEventListener('focus',refreshOnFocus)
+        return ()=>{controller?.abort();window.removeEventListener('focus',refreshOnFocus)}
     },[dispatch,userId,authVersion])
 }
 

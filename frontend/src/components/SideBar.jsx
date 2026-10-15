@@ -8,6 +8,7 @@ import { setSearchDataForSession, setSelectedUser, setUserData } from '../redux/
 import { reportApiError } from '../utils/reportApiError'
 import Avatar from './Avatar'
 import { messagePreview, messagePreviewTime, sortContactsByActivity } from '../utils/conversations'
+import { availabilityLabel } from '../utils/profile'
 
 function SideBar() {
   const { userData, authVersion, otherUsers, selectedUser, onlineUsers, searchData, inbox, typingUsers } = useSelector(state => state.user)
@@ -78,7 +79,7 @@ function SideBar() {
         {people?.length === 0 && !searching && <div className="list-empty">{query.trim() ? 'No people found.' : 'No conversations yet.'}</div>}
       </div>
       <div className="sidebar-footer">
-        <button className="footer-user" type="button" onClick={() => navigate('/profile')}><Avatar user={userData} size="small" /><span><strong>{userData?.name || userData?.userName}</strong><small>My profile</small></span><FiUser aria-hidden="true" /></button>
+        <button className="footer-user" type="button" onClick={() => navigate('/profile')}><Avatar user={userData} size="small" /><span><strong>{userData?.name || userData?.userName}</strong><small>My profile · {availabilityLabel(userData?.availability)}</small></span><FiUser aria-hidden="true" /></button>
         <button className="logout-button" type="button" onClick={handleLogOut} title="Log out" aria-label="Log out"><FiLogOut /></button>
       </div>
     </aside>

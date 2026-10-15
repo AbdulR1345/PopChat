@@ -39,6 +39,12 @@ const userSlice=createSlice({
       const {userId,authVersion,users}=action.payload
       if(state.userData?._id===userId && state.authVersion===authVersion){
         state.otherUsers=users
+        const current=users.find(user=>user._id===state.selectedUser?._id)
+        if(current) state.selectedUser=current
+        if(state.searchData){
+          const byId=new Map(users.map(user=>[user._id,user]))
+          state.searchData=state.searchData.map(user=>byId.get(user._id) ?? user)
+        }
       }
     },
     setSearchDataForSession:(state,action)=>{

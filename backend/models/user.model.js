@@ -22,6 +22,17 @@ const userSchema=new mongoose.Schema({
     image:{
         type:String,
         default:""
+    },
+    bio:{
+        type:String,
+        trim:true,
+        maxlength:160,
+        default:""
+    },
+    availability:{
+        type:String,
+        enum:["available","busy","away"],
+        default:"available"
     }
 },{timestamps:true})
 

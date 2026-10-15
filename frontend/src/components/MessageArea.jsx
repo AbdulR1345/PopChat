@@ -11,6 +11,7 @@ import { appendMessage, applyMessageUpdate } from '../redux/messageSlice'
 import SocketContext from '../context/SocketContext'
 import { serverUrl } from '../main'
 import useReadReceipts from '../customHooks/useReadReceipts'
+import { availabilityLabel } from '../utils/profile'
 
 function MessageArea({ loadingMessages, onOpenDetails }) {
   const { selectedUser, userData, onlineUsers, typingUsers } = useSelector(state => state.user)
@@ -161,7 +162,7 @@ function MessageArea({ loadingMessages, onOpenDetails }) {
       <header className="chat-header">
         <button className="icon-button mobile-back" type="button" aria-label="Back to conversations" onClick={() => dispatch(setSelectedUser(null))}><FiArrowLeft /></button>
         <Avatar user={selectedUser} online={isOnline} size="medium" />
-        <div className="chat-header-copy"><strong>{selectedUser.name || selectedUser.userName}</strong><span className={isTyping || isOnline ? 'status-online' : ''}>{isTyping ? 'Typing…' : isOnline ? 'Active now' : 'Offline'}</span></div>
+        <div className="chat-header-copy"><strong>{selectedUser.name || selectedUser.userName}</strong><span><span className={isTyping || isOnline ? 'status-online' : ''}>{isTyping ? 'Typing…' : isOnline ? 'Active now' : 'Offline'}</span><span> · {availabilityLabel(selectedUser.availability)}</span></span></div>
         <button className="icon-button details-toggle" type="button" aria-label="Show contact details" title="Contact details" onClick={onOpenDetails}><FiInfo /></button>
       </header>
       <div className="message-scroll" ref={messageScroll} role="log" aria-label="Messages" onScroll={event => {

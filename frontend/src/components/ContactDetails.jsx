@@ -1,10 +1,11 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useSelector } from 'react-redux'
 import axios from 'axios'
-import { FiImage, FiMail, FiUser, FiX } from 'react-icons/fi'
+import { FiImage, FiUser, FiX } from 'react-icons/fi'
 import Avatar from './Avatar'
 import SocketContext from '../context/SocketContext'
 import { serverUrl } from '../main'
+import { contactProfile } from '../utils/profile'
 
 function MediaThumbnail({ item, onOpen }) {
   const [failed, setFailed] = useState(false)
@@ -112,6 +113,7 @@ function ContactDetails({ open, onClose }) {
   }, [messages, otherId])
 
   if (!selectedUser) return <aside className="contact-details" aria-label="Contact details"><header className="details-header"><span className="eyebrow">CONTACT DETAILS</span></header><div className="shared-empty details-placeholder"><FiUser /><span>Select a conversation to see contact details and shared images.</span></div></aside>
+  const contact = contactProfile(selectedUser, isOnline)
   const visible = media.conversationId === otherId ? media : { items: [], nextCursor: null, loading: true, error: '' }
   const openViewer = item => { setViewer(item); setViewerFailed(false) }
   const senderName = item => String(item.sender) === String(userId) ? 'You' : selectedUser.name || selectedUser.userName
@@ -120,9 +122,9 @@ function ContactDetails({ open, onClose }) {
     {open && <button className="details-scrim" type="button" aria-label="Close contact details" onClick={onClose} />}
     <aside className={`contact-details ${open ? 'details-open' : ''}`} aria-label="Contact details">
       <header className="details-header"><span className="eyebrow">CONTACT DETAILS</span><button className="icon-button details-close" type="button" aria-label="Close contact details" onClick={onClose}><FiX /></button></header>
-      <div className="contact-hero"><Avatar user={selectedUser} online={isOnline} size="large" /><h2>{selectedUser.name || selectedUser.userName}</h2><p className={isOnline ? 'status-online' : ''}>{isOnline ? 'Active now' : 'Offline'}</p></div>
+      <div className="contact-hero"><Avatar user={selectedUser} online={isOnline} size="large" /><h2>{contact.name}</h2><p className={isOnline ? 'status-online' : ''}>{contact.presence}</p><span className="availability-badge">{contact.availability}</span></div>
       <div className="details-divider" />
-      <div className="details-section"><h3>About</h3>{selectedUser.userName && <div className="detail-line"><FiUser /><span><small>Username</small><strong>@{selectedUser.userName}</strong></span></div>}{selectedUser.email && <div className="detail-line"><FiMail /><span><small>Email</small><strong>{selectedUser.email}</strong></span></div>}</div>
+      <div className="details-section"><h3>About</h3>{contact.username && <div className="detail-line"><FiUser /><span><small>Username</small><strong>@{contact.username}</strong></span></div>}{contact.bio && <p className="contact-bio">{contact.bio}</p>}{!contact.bio && <p className="contact-bio-empty">No bio yet.</p>}</div>
       <div className="details-divider" />
       <div className="details-section"><div className="section-title"><h3>Shared images</h3><span>{visible.items.length} loaded</span></div>
         {visible.items.length > 0 && <div className="shared-images">{visible.items.map(item => <MediaThumbnail key={item._id} item={item} onOpen={openViewer} />)}</div>}
