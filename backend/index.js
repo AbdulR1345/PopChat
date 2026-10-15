@@ -13,6 +13,7 @@ import messageRouter from "./routes/message.routes.js";
 import { app, io, server } from "./socket/socket.js";
 import mongoose from "mongoose";
 import { allowedOrigin, verifyRequestOrigin } from "./config/origin.js";
+import Message from "./models/message.model.js";
 
 const port = process.env.PORT || 5000;
 
@@ -35,6 +36,7 @@ app.use((error, req, res, next) => {
 
 try {
   await connectDb();
+  await Message.init();
   server.listen(port, () => console.log("server started"));
 } catch {
   console.error("database connection failed");

@@ -7,9 +7,10 @@ import { serverUrl } from '../main'
 import { setSearchDataForSession, setSelectedUser, setUserData } from '../redux/userSlice'
 import { reportApiError } from '../utils/reportApiError'
 import Avatar from './Avatar'
+import { messagePreview, messagePreviewTime, sortContactsByActivity } from '../utils/conversations'
 
 function SideBar() {
-  const { userData, authVersion, otherUsers, selectedUser, onlineUsers, searchData } = useSelector(state => state.user)
+  const { userData, authVersion, otherUsers, selectedUser, onlineUsers, searchData, inbox, typingUsers } = useSelector(state => state.user)
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const dispatch = useDispatch()
@@ -43,7 +44,9 @@ function SideBar() {
     } catch (error) { reportApiError(error) }
   }
 
-  const people = (query.trim() ? searchData : otherUsers)?.filter(user => user._id !== userData?._id)
+  const summaries = new Map((inbox ?? []).map(item => [String(item.userId), item]))
+  const candidates = (query.trim() ? searchData : otherUsers)?.filter(user => user._id !== userData?._id)
+  const people = candidates && (query.trim() ? candidates : sortContactsByActivity(candidates, inbox))
   const chooseUser = user => { dispatch(setSelectedUser(user)); setQuery('') }
 
   return (
@@ -61,10 +64,13 @@ function SideBar() {
       <div className="conversation-list">
         {people?.map(user => {
           const isOnline = onlineUsers?.includes(user._id)
+          const summary = summaries.get(user._id)
+          const preview = messagePreview(summary?.lastMessage)
+          const unread = summary?.unreadCount || 0
           return <button key={user._id} type="button" className={`conversation-item ${selectedUser?._id === user._id ? 'active' : ''}`} onClick={() => chooseUser(user)}>
             <Avatar user={user} online={isOnline} size="medium" />
-            <span className="conversation-copy"><strong>{user.name || user.userName}</strong><span>{isOnline ? 'Online now' : user.name && user.userName ? `@${user.userName}` : 'Offline'}</span></span>
-            {isOnline && <span className="active-indicator" aria-label="Online" />}
+            <span className="conversation-copy"><strong>{user.name || user.userName}</strong><span className={typingUsers[user._id] ? 'typing-preview' : ''}>{typingUsers[user._id] ? 'Typing…' : preview || (isOnline ? 'Online now' : user.name && user.userName ? `@${user.userName}` : 'Offline')}</span></span>
+            {(summary?.lastMessage || unread > 0) && <span className="conversation-meta">{summary?.lastMessage && <time dateTime={summary.lastMessage.createdAt}>{messagePreviewTime(summary.lastMessage.createdAt)}</time>}{unread > 0 && <span className="unread-badge" aria-label={`${unread} unread messages`}>{unread > 99 ? '99+' : unread}</span>}</span>}
           </button>
         })}
         {!people && <div className="list-empty">{query.trim() ? 'Searching…' : 'Loading people…'}</div>}

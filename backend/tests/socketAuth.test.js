@@ -21,6 +21,7 @@ const originalExists = User.exists
 const originalFindOne = Conversation.findOne
 const originalConversationCreate = Conversation.create
 const originalMessageCreate = Message.create
+const originalMessageFind = Message.find
 const clients = new Set()
 let baseUrl
 
@@ -63,6 +64,7 @@ const nextEvent = (client, name, predicate = () => true) => new Promise((resolve
 before(async () => {
   process.env.JWT_SECRET = "socket-auth-test-secret"
   User.exists = async ({ _id }) => _id === alice || _id === bob ? { _id } : null
+  Message.find = () => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) })
   app.use(express.json())
   app.use(cookieParser())
   app.use("/api/auth", authRouter)
@@ -79,6 +81,7 @@ after(async () => {
   Conversation.findOne = originalFindOne
   Conversation.create = originalConversationCreate
   Message.create = originalMessageCreate
+  Message.find = originalMessageFind
   if (originalSecret === undefined) delete process.env.JWT_SECRET
   else process.env.JWT_SECRET = originalSecret
 })
@@ -169,18 +172,23 @@ test("HTTP message sender is authenticated and newMessage reaches every recipien
   recipientTwo.disconnect()
 })
 
-test("message retrieval is limited to an authenticated two-person conversation", async () => {
+test("message retrieval is limited to the authenticated two-person message pair", async () => {
   const seen = []
-  Conversation.findOne = query => {
+  Message.find = query => {
     seen.push(query)
-    return { populate: async () => ({ messages: [{ _id: "message-1", sender: alice, receiver: bob }] }) }
+    return {
+      sort: () => ({
+        lean: async () => [{ _id: "message-1", sender: alice, receiver: bob }],
+        limit: () => ({ lean: async () => [] }),
+      }),
+    }
   }
   const response = await fetch(`${baseUrl}/api/message/get/${bob}`, {
     headers: { Cookie: cookieFor(alice) },
   })
   assert.equal(response.status, 200)
   assert.equal((await response.json()).length, 1)
-  assert.deepEqual(seen[0], { partcipants: { $all: [alice, bob], $size: 2 } })
+  assert.deepEqual(seen[0], { $or: [{ sender: alice, receiver: bob }, { sender: bob, receiver: alice }] })
 
   const unauthenticated = await fetch(`${baseUrl}/api/message/get/${bob}`)
   assert.equal(unauthenticated.status, 401)
