@@ -1,51 +1,118 @@
 # PopChat
 
-PopChat is a one-to-one realtime messaging application. It uses a React/Vite client and an Express, Socket.IO, and MongoDB backend. The project began from a purchased starter application and has since been substantially customized with messaging, account, privacy, and conversation features.
+A full-stack real-time messaging application built with React, Node.js, Express, MongoDB, and Socket.IO.
+
+PopChat provides a modern, responsive platform for private one-to-one communication, featuring instant messaging, real-time presence, media sharing, and personalized conversation management.
 
 ## Features
 
-Cookie-based accounts; realtime text and image messages; online status and typing indicators; delivery and read receipts; reactions, replies, edit and delete; conversation previews, unread counts, pin, archive, and mute; profile customization and email privacy; shared media; multi-tab updates; responsive UI.
+### Real-Time Communication
 
-## Stack and architecture
+- Instant one-to-one text messaging
+- Image sharing and shared media gallery
+- Online and offline presence
+- Live typing indicators
+- Message delivery and read receipts
+- Unread message counts and conversation previews
 
-React, Vite, Redux Toolkit, Axios, Node.js, Express 5, Socket.IO, MongoDB Atlas/Mongoose, and Cloudinary. One Node HTTP server handles `/api/*`, `/socket.io/*`, `/health`, and the built React files. Production browser requests stay on the Render service origin. JWTs stay in `HttpOnly` cookies.
+### Advanced Messaging
 
-## Local setup
+- Emoji reactions
+- Message replies
+- Edit and delete messages
+- Conversation pinning, archiving, and muting
+- Real-time updates across multiple browser tabs
 
-Use Node.js 24.21.0 and npm. From this repository root:
+### Authentication and User Profiles
 
-```text
-npm ci --prefix backend
-npm ci --prefix frontend
+- Secure signup and login
+- JWT authentication using HTTP-only cookies
+- Persistent authenticated sessions
+- Profile picture and bio customization
+- Availability status
+- Email privacy controls
+
+### User Experience
+
+- Modern, responsive interface
+- Mobile-friendly conversation layout
+- Conversation search and organization
+- Session-aware protected routes
+
+## Tech Stack
+
+| Layer          | Technologies                     |
+| -------------- | -------------------------------- |
+| Frontend       | React, Vite, Redux, Tailwind CSS |
+| Backend        | Node.js, Express.js              |
+| Database       | MongoDB, Mongoose                |
+| Real-time      | Socket.IO                        |
+| Authentication | JWT, HTTP-only cookies           |
+| Media Storage  | Cloudinary                       |
+| Deployment     | Render                           |
+
+## Architecture
+
+PopChat uses a React single-page application with an Express REST API and Socket.IO for bidirectional real-time communication.  
+MongoDB stores user profiles, messages, and conversation preferences. Cloudinary handles image storage.  
+In production, Express serves the compiled React application alongside the API and WebSocket endpoints under a single HTTPS origin.
+
+## Security and Reliability
+
+- HTTP-only cookie authentication
+- Authenticated Socket.IO connections
+- Protected API endpoints
+- Server-side validation
+- Restricted image uploads
+- Message-send idempotency
+- Session-aware connection handling
+- Responsive error handling and reconnection behavior
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 24
+- MongoDB Atlas connection
+- Cloudinary account
+
+### Installation
+
+Clone the repository:
+
+````bash
+git clone https://github.com/AbdulR1345/PopChat.git
+cd PopChat
+
+Install dependencies:
+
+```bash
+npm install --prefix backend
+npm install --prefix frontend
+````
+
+Configure the backend environment using `backend/.env.example` as a reference.
+
+Start the backend:
+
+```bash
+npm run dev --prefix backend
 ```
 
-Create `backend/.env` using [backend/.env.example](backend/.env.example) as a list of names, with your own development values. Never commit credentials. Start the backend with `npm run dev --prefix backend` and the frontend with `npm run dev --prefix frontend` in separate terminals. The backend defaults to port 5000; Vite defaults to 5173. If the backend uses another port, set `VITE_SERVER_URL` in `frontend/.env` to its local origin. This value configures only the Vite development proxy; production client code uses relative URLs.
+Start the frontend in another terminal:
 
-## Production build and checks
-
-```text
-npm ci --omit=dev --prefix backend
-npm ci --include=dev --prefix frontend
-npm run build --prefix frontend
-npm start --prefix backend
+```bash
+npm run dev --prefix frontend
 ```
 
-Run `node --test` inside each of `backend` and `frontend`. Run `npm run lint --prefix frontend` and `npm run build --prefix frontend` from the root. A production backend requires `NODE_ENV=production`, `MONGODB_URL`, `JWT_SECRET`, `FRONTEND_ORIGIN`, `CLOUD_NAME`, `API_KEY`, and `API_SECRET`. Render supplies `PORT`; local development defaults to 5000. `FRONTEND_ORIGIN` must be the exact HTTPS origin of the Render service, with no trailing slash.
+Open `http://localhost:5173`.
 
-## Security and limitations
+## Deployment
 
-The session cookie is `HttpOnly`; in production it is `Secure`, host-only, `SameSite=Lax`, and scoped to `/`. Mutation requests and Socket.IO browser origins are checked against `FRONTEND_ORIGIN`; socket identity comes from the verified cookie. Image uploads require authentication and check size, MIME type, and file signature. Cloudinary image delivery URLs are public to anyone who has the URL. The legacy GET logout endpoint remains for compatibility, but new clients should use POST.
+PopChat is designed for single-origin deployment on Render, where Express serves the frontend, REST API, and Socket.IO endpoints.
 
-This version has no distributed signup or login rate limit. The free Render plan sleeps after inactivity and may interrupt realtime connections; it is suitable for a demo rather than reliable production traffic. See [the Render deployment guide](docs/RENDER_DEPLOYMENT.md) for operational checks and database/media isolation.
+## Author
 
-Logout clears the browser cookie and disconnects sockets using that token. A copied JWT remains valid until its seven-day expiry because this version has no server-side token revocation store.
+**Abdul Rahaman**
 
-## Screenshots and links
-
-- Screenshots: add approved screenshots before publication.
-- Live demo: add the URL after deployment.
-- GitHub: add the public repository URL after publication.
-
-## Credits
-
-PopChat includes a purchased starter application and its artwork. Later engineering work added the current messaging, profile, privacy, conversation, security, and deployment behavior. Preserve any seller or third-party attribution required by the purchase terms; the repository does not contain a project-wide license grant or an original seller notice. Dependency licenses remain with their respective packages.
+GitHub: [AbdulR1345](https://github.com/AbdulR1345)
