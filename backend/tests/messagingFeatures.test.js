@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken'
 import User from '../models/user.model.js'
 import Message from '../models/message.model.js'
 import Conversation from '../models/conversation.model.js'
+import ConversationPreference from '../models/conversationPreference.model.js'
 import messageRouter from '../routes/message.routes.js'
 import { app, io, server } from '../socket/socket.js'
 
@@ -197,6 +198,23 @@ test('retrying a send with the same client message id creates one message', asyn
   assert.equal((await first.json())._id, (await second.json())._id)
   assert.equal(documents.length, 1)
   assert.equal(conversations.get(keyFor([alice, bob])).messages.length, 1)
+})
+
+test('incoming and outgoing messages never mutate archive preferences or unread accounting', async () => {
+  documents.length = 0
+  conversations.clear()
+  const originalUpdate = ConversationPreference.findOneAndUpdate
+  ConversationPreference.findOneAndUpdate = async () => { throw new Error('message send touched preferences') }
+  try {
+    assert.equal((await postMessage(bob, alice, { message: 'incoming' })).status, 201)
+    const inbox = await fetch(`${baseUrl}/api/message/inbox`, { headers: { Cookie: cookieFor(alice) } })
+    assert.equal((await inbox.json())[0].unreadCount, 1)
+    assert.equal((await postMessage(alice, bob, { message: 'outgoing' })).status, 201)
+    const refreshed = await fetch(`${baseUrl}/api/message/inbox`, { headers: { Cookie: cookieFor(alice) } })
+    assert.equal((await refreshed.json())[0].unreadCount, 1)
+  } finally {
+    ConversationPreference.findOneAndUpdate = originalUpdate
+  }
 })
 
 test('a unique-key race returns the existing message and repairs its conversation link', async () => {

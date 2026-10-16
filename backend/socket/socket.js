@@ -42,6 +42,10 @@ export const publishInboxUpdated = userIds => {
   }
 }
 
+export const publishConversationPreferenceUpdated = (userId, payload) => {
+  emitToUser(userId, "conversationPreferenceUpdated", payload)
+}
+
 export const publishMessage = message => {
   emitToUser(message.sender, "messageCreated", message)
   for (const socketId of getReceiverSocketIds(message.receiver)) {

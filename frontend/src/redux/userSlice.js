@@ -10,6 +10,8 @@ const userSlice=createSlice({
     onlineUsers:[],
     searchData:null,
     inbox:null,
+    preferences:null,
+    preferenceLoadError:false,
     typingUsers:{}
    },  
    reducers:{
@@ -19,6 +21,8 @@ const userSlice=createSlice({
      state.otherUsers=null
      state.searchData=null
      state.inbox=null
+     state.preferences=null
+     state.preferenceLoadError=false
      state.typingUsers={}
      state.selectedUser=null
    }
@@ -67,6 +71,30 @@ const userSlice=createSlice({
           }
           return summary
         })
+      }
+    },
+    setPreferencesForSession:(state,action)=>{
+      const {userId,authVersion,preferences}=action.payload
+      if(state.userData?._id!==userId || state.authVersion!==authVersion) return
+      const next={...state.preferences}
+      for(const item of Array.isArray(preferences)?preferences:[]){
+        const id=String(item.otherUserId)
+        if(!next[id] || Number(item.revision)>Number(next[id].revision)) next[id]=item
+      }
+      state.preferences=next
+      state.preferenceLoadError=false
+    },
+    setPreferenceLoadErrorForSession:(state,action)=>{
+      const {userId,authVersion}=action.payload
+      if(state.userData?._id===userId && state.authVersion===authVersion) state.preferenceLoadError=true
+    },
+    applyPreferenceForSession:(state,action)=>{
+      const {userId,authVersion,preference}=action.payload
+      if(state.userData?._id!==userId || state.authVersion!==authVersion || !preference?.otherUserId) return
+      state.preferences ||= {}
+      const id=String(preference.otherUserId)
+      if(!state.preferences[id] || Number(preference.revision)>Number(state.preferences[id].revision)){
+        state.preferences[id]=preference
       }
     },
     setLastSentMessage:(state,action)=>{
@@ -119,5 +147,5 @@ const userSlice=createSlice({
    }
 })
 
-export const {setUserData,setCurrentUser,setOtherUsersForSession,setSearchDataForSession,setInboxForSession,setLastSentMessage,applyInboxMessageUpdate,setTypingUser,clearTypingUsers,setSelectedUser,setOnlineUsers}=userSlice.actions
+export const {setUserData,setCurrentUser,setOtherUsersForSession,setSearchDataForSession,setInboxForSession,setPreferencesForSession,setPreferenceLoadErrorForSession,applyPreferenceForSession,setLastSentMessage,applyInboxMessageUpdate,setTypingUser,clearTypingUsers,setSelectedUser,setOnlineUsers}=userSlice.actions
 export default userSlice.reducer

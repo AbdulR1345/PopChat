@@ -14,6 +14,8 @@ import { app, io, server } from "./socket/socket.js";
 import mongoose from "mongoose";
 import { allowedOrigin, verifyRequestOrigin } from "./config/origin.js";
 import Message from "./models/message.model.js";
+import ConversationPreference from "./models/conversationPreference.model.js";
+import conversationPreferenceRouter from "./routes/conversationPreference.routes.js";
 
 const port = process.env.PORT || 5000;
 
@@ -29,17 +31,23 @@ app.use(verifyRequestOrigin);
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/message", messageRouter);
+app.use("/api/conversation/preferences", conversationPreferenceRouter);
 app.use((error, req, res, next) => {
   const badRequest = error.status === 400;
   res.status(badRequest ? 400 : 500).json({ message: badRequest ? "invalid request" : "server error" });
 });
 
+let startupFailure = "database connection failed";
 try {
   await connectDb();
+  startupFailure = "message index setup failed";
   await Message.init();
+  // Fail startup if the approved uniqueness constraint cannot be built.
+  startupFailure = "conversation preference unique index setup failed";
+  await ConversationPreference.createIndexes();
   server.listen(port, () => console.log("server started"));
 } catch {
-  console.error("database connection failed");
+  console.error(startupFailure);
   await mongoose.disconnect();
   process.exitCode = 1;
 }

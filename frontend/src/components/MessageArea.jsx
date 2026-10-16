@@ -12,9 +12,10 @@ import SocketContext from '../context/SocketContext'
 import { serverUrl } from '../main'
 import useReadReceipts from '../customHooks/useReadReceipts'
 import { availabilityLabel } from '../utils/profile'
+import { preferenceFor } from '../utils/conversations'
 
-function MessageArea({ loadingMessages, onOpenDetails }) {
-  const { selectedUser, userData, onlineUsers, typingUsers } = useSelector(state => state.user)
+function MessageArea({ loadingMessages, onOpenDetails, onUpdatePreference }) {
+  const { selectedUser, userData, onlineUsers, typingUsers, preferences } = useSelector(state => state.user)
   const { messages, updates } = useSelector(state => state.message)
   const selectedUserId = selectedUser?._id
   const userId = userData?._id
@@ -37,6 +38,9 @@ function MessageArea({ loadingMessages, onOpenDetails }) {
   const [actionError, setActionError] = useState('')
   const [replyTarget, setReplyTarget] = useState(null)
   const [jumpNotice, setJumpNotice] = useState('')
+  const [unarchivePending, setUnarchivePending] = useState(false)
+  const [preferenceError, setPreferenceError] = useState('')
+  const selectedPreference = preferenceFor(preferences, selectedUserId)
 
   const isTyping = Boolean(typingUsers[selectedUserId])
   const lastMessageId = messages.at(-1)?._id
@@ -157,12 +161,21 @@ function MessageArea({ loadingMessages, onOpenDetails }) {
     else stopTyping()
   }
 
+  const unarchive = async () => {
+    setUnarchivePending(true)
+    setPreferenceError('')
+    try { await onUpdatePreference(selectedUserId, { archived: false }) }
+    catch (error) { setPreferenceError(error?.response?.data?.message || 'Conversation could not be unarchived.') }
+    finally { setUnarchivePending(false) }
+  }
+
   return <section className={`message-area ${selectedUser ? 'message-area-open' : ''}`} aria-label="Chat">
     {selectedUser ? <>
       <header className="chat-header">
         <button className="icon-button mobile-back" type="button" aria-label="Back to conversations" onClick={() => dispatch(setSelectedUser(null))}><FiArrowLeft /></button>
         <Avatar user={selectedUser} online={isOnline} size="medium" />
         <div className="chat-header-copy"><strong>{selectedUser.name || selectedUser.userName}</strong><span><span className={isTyping || isOnline ? 'status-online' : ''}>{isTyping ? 'Typing…' : isOnline ? 'Active now' : 'Offline'}</span><span> · {availabilityLabel(selectedUser.availability)}</span></span></div>
+        {selectedPreference.archived && <div className="chat-archive-control"><span>Archived</span><button type="button" disabled={unarchivePending} onClick={unarchive}>{unarchivePending ? 'Saving…' : 'Unarchive'}</button></div>}
         <button className="icon-button details-toggle" type="button" aria-label="Show contact details" title="Contact details" onClick={onOpenDetails}><FiInfo /></button>
       </header>
       <div className="message-scroll" ref={messageScroll} role="log" aria-label="Messages" onScroll={event => {
@@ -183,6 +196,7 @@ function MessageArea({ loadingMessages, onOpenDetails }) {
         {preview && <div className="attachment-preview"><img src={preview} alt="Selected attachment" /><span>{attachment?.name}</span><button type="button" className="icon-button" aria-label="Remove attachment" onClick={clearAttachment}><FiX /></button></div>}
         {sendError && <p className="form-error composer-error" role="alert">{sendError}</p>}
         {actionError && <p className="form-error composer-error" role="alert">{actionError}</p>}
+        {preferenceError && <p className="form-error composer-error" role="alert">{preferenceError}</p>}
         {jumpNotice && <p className="composer-notice" role="status">{jumpNotice}</p>}
         {showPicker && <div className="emoji-popover"><EmojiPicker width={300} height={350} theme="dark" onEmojiClick={emoji => { setInput(current => current + emoji.emoji); pendingClientMessageId.current = null; signalTyping(); setShowPicker(false) }} /></div>}
         <form className="composer" onSubmit={handleSendMessage}>
