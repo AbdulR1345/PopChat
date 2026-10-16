@@ -112,8 +112,16 @@ test("auth and current-user endpoints retain own email and cookie session", asyn
         body: JSON.stringify({ email: "alice@example.test", password: "wrong-password" }),
     })
     assert.equal(wrongPassword.response.status, 400)
-    assert.deepEqual(wrongPassword.body, { message: "incorrect password" })
+    assert.deepEqual(wrongPassword.body, { message: "invalid credentials" })
     assert.equal(wrongPassword.response.headers.get("set-cookie"), null)
+
+    const unknownEmail = await request("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "unknown@example.test", password: "wrong-password" }),
+    })
+    assert.equal(unknownEmail.response.status, 400)
+    assert.deepEqual(unknownEmail.body, wrongPassword.body)
 
     const login = await request("/api/auth/login", {
         method: "POST",

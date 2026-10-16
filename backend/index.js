@@ -1,60 +1,49 @@
-import dns from "dns";
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
+import "dotenv/config"
+import connectDb from "./config/db.js"
+import { app, io, server } from "./socket/socket.js"
+import mongoose from "mongoose"
+import { configureHttpApp } from "./config/httpApp.js"
+import { validateProductionEnvironment } from "./config/production.js"
+import User from "./models/user.model.js"
+import Message from "./models/message.model.js"
+import ConversationPreference from "./models/conversationPreference.model.js"
 
-import express from "express";
-import dotenv from "dotenv";
-import connectDb from "./config/db.js";
-import authRouter from "./routes/auth.routes.js";
-import cookieParser from "cookie-parser";
-dotenv.config();
-import cors from "cors";
-import userRouter from "./routes/user.routes.js";
-import messageRouter from "./routes/message.routes.js";
-import { app, io, server } from "./socket/socket.js";
-import mongoose from "mongoose";
-import { allowedOrigin, verifyRequestOrigin } from "./config/origin.js";
-import Message from "./models/message.model.js";
-import ConversationPreference from "./models/conversationPreference.model.js";
-import conversationPreferenceRouter from "./routes/conversationPreference.routes.js";
-
-const port = process.env.PORT || 5000;
-
-app.use(
-  cors({
-    origin: allowedOrigin,
-    credentials: true,
-  }),
-);
-app.use(express.json());
-app.use(cookieParser());
-app.use(verifyRequestOrigin);
-app.use("/api/auth", authRouter);
-app.use("/api/user", userRouter);
-app.use("/api/message", messageRouter);
-app.use("/api/conversation/preferences", conversationPreferenceRouter);
-app.use((error, req, res, next) => {
-  const badRequest = error.status === 400;
-  res.status(badRequest ? 400 : 500).json({ message: badRequest ? "invalid request" : "server error" });
-});
-
-let startupFailure = "database connection failed";
+const port = process.env.PORT || 5000
+let ready = false
+let startupFailure = "production configuration invalid"
 try {
-  await connectDb();
-  startupFailure = "message index setup failed";
-  await Message.init();
-  // Fail startup if the approved uniqueness constraint cannot be built.
-  startupFailure = "conversation preference unique index setup failed";
-  await ConversationPreference.createIndexes();
-  server.listen(port, () => console.log("server started"));
-} catch {
-  console.error(startupFailure);
-  await mongoose.disconnect();
-  process.exitCode = 1;
+  validateProductionEnvironment()
+  startupFailure = "frontend or HTTP configuration failed"
+  configureHttpApp(app, { isReady: () => ready && mongoose.connection.readyState === 1 })
+  startupFailure = "database connection failed"
+  await connectDb()
+  startupFailure = "user index setup failed"
+  await User.init()
+  startupFailure = "message index setup failed"
+  await Message.init()
+  startupFailure = "conversation preference unique index setup failed"
+  await ConversationPreference.createIndexes()
+  ready = true
+  startupFailure = "HTTP listener failed"
+  await new Promise((resolve, reject) => {
+    const onError = error => { server.off("listening", onListening); reject(error) }
+    const onListening = () => { server.off("error", onError); resolve() }
+    server.once("error", onError)
+    server.once("listening", onListening)
+    server.listen(port, "0.0.0.0")
+  })
+  console.log("server started")
+} catch (error) {
+  const safeMessage = /^(missing production environment variables:|FRONTEND_ORIGIN must|frontend build missing:)/.test(error?.message ?? "") ? `: ${error.message}` : ""
+  console.error(`${startupFailure}${safeMessage}`)
+  await mongoose.disconnect()
+  process.exitCode = 1
 }
 
 const shutdown = async () => {
-  await new Promise(resolve => io.close(resolve));
-  await mongoose.disconnect();
-};
-process.once("SIGINT", shutdown);
-process.once("SIGTERM", shutdown);
+  ready = false
+  await new Promise(resolve => io.close(resolve))
+  await mongoose.disconnect()
+}
+process.once("SIGINT", shutdown)
+process.once("SIGTERM", shutdown)

@@ -2,7 +2,7 @@ import axios from "axios"
 import { useEffect, useRef } from "react"
 import { serverUrl } from "../main"
 import { useDispatch, useSelector } from "react-redux"
-import { setCurrentUser } from "../redux/userSlice"
+import { finishSessionCheck, setCurrentUser } from "../redux/userSlice"
 import { reportApiError } from "../utils/reportApiError"
 
 const useGetCurrentUser=()=>{
@@ -21,7 +21,10 @@ const useGetCurrentUser=()=>{
                     dispatch(setCurrentUser({userData:result.data,authVersion:initialAuthVersion}))
                 }
             } catch (error) {
-                if(!axios.isCancel(error)) reportApiError(error)
+                if(!controller.signal.aborted && !axios.isCancel(error)) {
+                    if(error?.response?.status !== 401) reportApiError(error)
+                    dispatch(finishSessionCheck(initialAuthVersion))
+                }
             }
         }
         fetchUser()

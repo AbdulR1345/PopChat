@@ -11,6 +11,9 @@ function App() {
   useGetCurrentUser()
   useGetOtherUsers()
   const userData=useSelector(state=>state.user.userData)
+  const sessionStatus=useSelector(state=>state.user.sessionStatus)
+
+  if(sessionStatus==='pending') return <main className="auth-stage" role="status">Loading session…</main>
 
   return (
     <Routes>

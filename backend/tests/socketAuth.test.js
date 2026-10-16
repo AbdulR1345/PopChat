@@ -9,6 +9,7 @@ import Conversation from "../models/conversation.model.js"
 import Message from "../models/message.model.js"
 import authRouter from "../routes/auth.routes.js"
 import messageRouter from "../routes/message.routes.js"
+import { allowedOrigin } from "../config/origin.js"
 import { app, getReceiverSocketIds, io, server } from "../socket/socket.js"
 
 const requireFrontend = createRequire(new URL("../../frontend/package.json", import.meta.url))
@@ -119,6 +120,27 @@ test("a browser origin outside the configured frontend origin is rejected", asyn
   clients.add(client)
   await assert.rejects(connect(client))
   assert.equal(client.connected, false)
+  client.disconnect()
+})
+
+test("authenticated polling upgrades to WebSocket with the allowed browser origin", async () => {
+  const client = createClient(baseUrl, {
+    autoConnect: false, reconnection: false, transports: ["polling", "websocket"],
+    extraHeaders: { Cookie: cookieFor(alice), Origin: allowedOrigin }, timeout: 2000,
+  })
+  clients.add(client)
+  client.connect()
+  const upgraded = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("upgrade timed out")), 3000)
+    client.io.engine.on("upgrade", transport => { clearTimeout(timer); resolve(transport.name) })
+  })
+  await new Promise((resolve, reject) => {
+    if (client.connected) return resolve()
+    client.once("connect", resolve)
+    client.once("connect_error", reject)
+  })
+  assert.equal(await upgraded, "websocket")
+  assert.equal(io.sockets.sockets.get(client.id).data.userId, alice)
   client.disconnect()
 })
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import userReducer, {
   setCurrentUser,
+  finishSessionCheck,
   setOtherUsersForSession,
   setSearchDataForSession,
   setUserData,
@@ -62,4 +63,25 @@ test('session restoration loads the list and profile updates retain it', () => {
   state = userReducer(state, setUserData({ ...alice, name: 'Alice' }))
   assert.equal(state.authVersion, authVersion)
   assert.deepEqual(state.otherUsers, [bob])
+})
+
+test('initial session stays pending until resolved and stale completion cannot reverse logout', () => {
+  let state = userReducer(undefined, { type: 'init' })
+  assert.equal(state.sessionStatus, 'pending')
+  const firstVersion = state.authVersion
+  state = userReducer(state, setCurrentUser({ userData: alice, authVersion: firstVersion }))
+  assert.equal(state.sessionStatus, 'ready')
+  assert.deepEqual(state.userData, alice)
+
+  state = userReducer(undefined, { type: 'init' })
+  state = userReducer(state, finishSessionCheck(state.authVersion))
+  assert.equal(state.sessionStatus, 'ready')
+  assert.equal(state.userData, null)
+
+  state = userReducer(undefined, { type: 'init' })
+  state = userReducer(state, setUserData(null))
+  state = userReducer(state, finishSessionCheck(firstVersion))
+  state = userReducer(state, setCurrentUser({ userData: alice, authVersion: firstVersion }))
+  assert.equal(state.sessionStatus, 'ready')
+  assert.equal(state.userData, null)
 })

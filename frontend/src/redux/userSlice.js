@@ -4,6 +4,7 @@ const userSlice=createSlice({
    name:"user",
    initialState:{
     userData:null,
+    sessionStatus:'pending',
     authVersion:0,
     otherUsers:null,
     selectedUser:null,
@@ -16,6 +17,7 @@ const userSlice=createSlice({
    },  
    reducers:{
     setUserData:(state,action)=>{
+   state.sessionStatus='ready'
    if(!action.payload || state.userData?._id !== action.payload._id){
      state.authVersion++
      state.otherUsers=null
@@ -37,7 +39,11 @@ const userSlice=createSlice({
       if(state.authVersion===action.payload.authVersion && !state.userData){
         state.authVersion++
         state.userData=action.payload.userData
+        state.sessionStatus='ready'
       }
+    },
+    finishSessionCheck:(state,action)=>{
+      if(state.authVersion===action.payload) state.sessionStatus='ready'
     },
     setOtherUsersForSession:(state,action)=>{
       const {userId,authVersion,users}=action.payload
@@ -147,5 +153,5 @@ const userSlice=createSlice({
    }
 })
 
-export const {setUserData,setCurrentUser,setOtherUsersForSession,setSearchDataForSession,setInboxForSession,setPreferencesForSession,setPreferenceLoadErrorForSession,applyPreferenceForSession,setLastSentMessage,applyInboxMessageUpdate,setTypingUser,clearTypingUsers,setSelectedUser,setOnlineUsers}=userSlice.actions
+export const {setUserData,setCurrentUser,finishSessionCheck,setOtherUsersForSession,setSearchDataForSession,setInboxForSession,setPreferencesForSession,setPreferenceLoadErrorForSession,applyPreferenceForSession,setLastSentMessage,applyInboxMessageUpdate,setTypingUser,clearTypingUsers,setSelectedUser,setOnlineUsers}=userSlice.actions
 export default userSlice.reducer

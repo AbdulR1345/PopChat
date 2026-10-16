@@ -9,8 +9,11 @@ test("cookie settings retain localhost behavior and require HTTPS in production"
     assert.equal(cookieOptions().sameSite, "Strict")
     assert.equal(cookieOptions().secure, false)
     process.env.NODE_ENV = "production"
-    assert.equal(cookieOptions().sameSite, "None")
+    assert.equal(cookieOptions().sameSite, "Lax")
     assert.equal(cookieOptions().secure, true)
+    assert.equal(cookieOptions().httpOnly, true)
+    assert.equal(cookieOptions().path, "/")
+    assert.equal(clearCookieOptions().sameSite, "Lax")
     assert.equal(clearCookieOptions().secure, true)
   } finally {
     if (original === undefined) delete process.env.NODE_ENV

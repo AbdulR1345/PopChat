@@ -14,11 +14,11 @@ export const signUp=async (req,res)=>{
     }
     const checkUserByUserName=await User.findOne({userName})
     if(checkUserByUserName){
-        return res.status(400).json({message:"userName already exist"})
+        return res.status(400).json({message:"account details unavailable"})
     }
     const checkUserByEmail=await User.findOne({email})
     if(checkUserByEmail){
-        return res.status(400).json({message:"email already exist"})
+        return res.status(400).json({message:"account details unavailable"})
     }
 if(password.length<6){
     return res.status(400).json({message:"password must be at least 6 characters"})
@@ -49,12 +49,12 @@ export const login=async (req,res)=>{
      }
      const user=await User.findOne({email}).select("+password")
      if(!user){
-         return res.status(400).json({message:"user does not exist"})
+         return res.status(400).json({message:"invalid credentials"})
      }
 
  const isMatch=await bcrypt.compare(password,user.password)
  if(!isMatch){
-    return res.status(400).json({message:"incorrect password"})
+    return res.status(400).json({message:"invalid credentials"})
  }
  
  const token=await genToken(user._id)

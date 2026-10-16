@@ -7,7 +7,8 @@ import {Provider} from "react-redux"
 import { store } from './redux/store.js'
 import SocketProvider from './context/SocketProvider.jsx'
 
-export const serverUrl=import.meta.env.VITE_SERVER_URL || "http://localhost:8000"
+// Vite proxies API and Socket.IO in development; Render serves them directly.
+export const serverUrl = ''
 createRoot(document.getElementById('root')).render(
 <BrowserRouter>
 <Provider store={store}>
